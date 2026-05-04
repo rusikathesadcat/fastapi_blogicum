@@ -1,91 +1,53 @@
-"""CRUD endpoints for Post."""
-
 from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
-
-from app import models, schemas
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 from app.database import get_db
+from app.schemas import PostCreate, PostUpdate, PostOut, PostDetail
+from app.domain.use_cases.post_use_case import PostUseCase
+from app.api.error_handler import handle_domain_exception
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
 
-@router.get("/", response_model=List[schemas.PostOut],
-            summary="Список публикаций")
-def list_posts(
-    skip: int = 0,
-    limit: int = 20,
-    published_only: bool = False,
-    db: Session = Depends(get_db),
-):
-    """Вернуть список публикаций. При published_only=true — только опубликованные."""
-    query = db.query(models.Post)
-    if published_only:
-        query = query.filter(models.Post.is_published.is_(True))
-    return query.order_by(models.Post.pub_date.desc()).offset(skip).limit(limit).all()
+def get_post_use_case(db: Session = Depends(get_db)) -> PostUseCase:
+    return PostUseCase(db)
 
 
-@router.get("/{post_id}", response_model=schemas.PostDetail,
-            summary="Получить публикацию")
-def get_post(post_id: int, db: Session = Depends(get_db)):
-    """Вернуть публикацию по id со связанными автором, категорией, местом и комментариями."""
-    post = (
-        db.query(models.Post)
-        .options(
-            joinedload(models.Post.author),
-            joinedload(models.Post.category),
-            joinedload(models.Post.location),
-            joinedload(models.Post.comments),
-        )
-        .filter(models.Post.id == post_id)
-        .first()
-    )
-    if not post:
-        raise HTTPException(status_code=404, detail="Публикация не найдена")
-    return post
+@router.get("/", response_model=List[PostOut], summary="Список публикаций")
+def list_posts(skip: int = 0, limit: int = 20, use_case: PostUseCase = Depends(get_post_use_case)):
+    try:
+        return use_case.get_all(skip=skip, limit=limit)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.post("/", response_model=schemas.PostOut,
-             status_code=status.HTTP_201_CREATED,
-             summary="Создать публикацию")
-def create_post(payload: schemas.PostCreate, db: Session = Depends(get_db)):
-    """Создать новую публикацию."""
-    # Проверяем существование автора
-    author = db.query(models.User).filter(
-        models.User.id == payload.author_id
-    ).first()
-    if not author:
-        raise HTTPException(status_code=404, detail="Автор не найден")
-
-    post = models.Post(**payload.model_dump())
-    db.add(post)
-    db.commit()
-    db.refresh(post)
-    return post
+@router.get("/{post_id}", response_model=PostDetail, summary="Получить публикацию")
+def get_post(post_id: int, use_case: PostUseCase = Depends(get_post_use_case)):
+    try:
+        return use_case.get_by_id(post_id)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.put("/{post_id}", response_model=schemas.PostOut,
-            summary="Обновить публикацию")
-def update_post(post_id: int, payload: schemas.PostUpdate,
-                db: Session = Depends(get_db)):
-    """Частично обновить публикацию."""
-    post = db.query(models.Post).filter(models.Post.id == post_id).first()
-    if not post:
-        raise HTTPException(status_code=404, detail="Публикация не найдена")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(post, field, value)
-    db.commit()
-    db.refresh(post)
-    return post
+@router.post("/", response_model=PostOut, status_code=status.HTTP_201_CREATED, summary="Создать публикацию")
+def create_post(payload: PostCreate, use_case: PostUseCase = Depends(get_post_use_case)):
+    try:
+        return use_case.create(payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Удалить публикацию")
-def delete_post(post_id: int, db: Session = Depends(get_db)):
-    """Удалить публикацию по id (комментарии удаляются каскадно)."""
-    post = db.query(models.Post).filter(models.Post.id == post_id).first()
-    if not post:
-        raise HTTPException(status_code=404, detail="Публикация не найдена")
-    db.delete(post)
-    db.commit()
+@router.put("/{post_id}", response_model=PostOut, summary="Обновить публикацию")
+def update_post(post_id: int, payload: PostUpdate, use_case: PostUseCase = Depends(get_post_use_case)):
+    try:
+        return use_case.update(post_id, payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
+
+
+@router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить публикацию")
+def delete_post(post_id: int, use_case: PostUseCase = Depends(get_post_use_case)):
+    try:
+        use_case.delete(post_id)
+    except Exception as e:
+        raise handle_domain_exception(e)

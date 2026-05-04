@@ -1,77 +1,53 @@
-"""CRUD endpoints for Location."""
-
 from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-
-from app import models, schemas
 from app.database import get_db
+from app.schemas import LocationCreate, LocationUpdate, LocationOut
+from app.domain.use_cases.location_use_case import LocationUseCase
+from app.api.error_handler import handle_domain_exception
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
 
 
-@router.get("/", response_model=List[schemas.LocationOut],
-            summary="Список местоположений")
-def list_locations(skip: int = 0, limit: int = 20,
-                   db: Session = Depends(get_db)):
-    """Вернуть список всех местоположений."""
-    return db.query(models.Location).offset(skip).limit(limit).all()
+def get_location_use_case(db: Session = Depends(get_db)) -> LocationUseCase:
+    return LocationUseCase(db)
 
 
-@router.get("/{location_id}", response_model=schemas.LocationOut,
-            summary="Получить местоположение")
-def get_location(location_id: int, db: Session = Depends(get_db)):
-    """Вернуть местоположение по id."""
-    location = db.query(models.Location).filter(
-        models.Location.id == location_id
-    ).first()
-    if not location:
-        raise HTTPException(status_code=404,
-                            detail="Местоположение не найдено")
-    return location
+@router.get("/", response_model=List[LocationOut], summary="Список локаций")
+def list_locations(skip: int = 0, limit: int = 20, use_case: LocationUseCase = Depends(get_location_use_case)):
+    try:
+        return use_case.get_all(skip=skip, limit=limit)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.post("/", response_model=schemas.LocationOut,
-             status_code=status.HTTP_201_CREATED,
-             summary="Создать местоположение")
-def create_location(payload: schemas.LocationCreate,
-                    db: Session = Depends(get_db)):
-    """Создать новое местоположение."""
-    location = models.Location(**payload.model_dump())
-    db.add(location)
-    db.commit()
-    db.refresh(location)
-    return location
+@router.get("/{location_id}", response_model=LocationOut, summary="Получить локацию")
+def get_location(location_id: int, use_case: LocationUseCase = Depends(get_location_use_case)):
+    try:
+        return use_case.get_by_id(location_id)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.put("/{location_id}", response_model=schemas.LocationOut,
-            summary="Обновить местоположение")
-def update_location(location_id: int, payload: schemas.LocationUpdate,
-                    db: Session = Depends(get_db)):
-    """Частично обновить местоположение."""
-    location = db.query(models.Location).filter(
-        models.Location.id == location_id
-    ).first()
-    if not location:
-        raise HTTPException(status_code=404,
-                            detail="Местоположение не найдено")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(location, field, value)
-    db.commit()
-    db.refresh(location)
-    return location
+@router.post("/", response_model=LocationOut, status_code=status.HTTP_201_CREATED, summary="Создать локацию")
+def create_location(payload: LocationCreate, use_case: LocationUseCase = Depends(get_location_use_case)):
+    try:
+        return use_case.create(payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Удалить местоположение")
-def delete_location(location_id: int, db: Session = Depends(get_db)):
-    """Удалить местоположение по id."""
-    location = db.query(models.Location).filter(
-        models.Location.id == location_id
-    ).first()
-    if not location:
-        raise HTTPException(status_code=404,
-                            detail="Местоположение не найдено")
-    db.delete(location)
-    db.commit()
+@router.put("/{location_id}", response_model=LocationOut, summary="Обновить локацию")
+def update_location(location_id: int, payload: LocationUpdate, use_case: LocationUseCase = Depends(get_location_use_case)):
+    try:
+        return use_case.update(location_id, payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
+
+
+@router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить локацию")
+def delete_location(location_id: int, use_case: LocationUseCase = Depends(get_location_use_case)):
+    try:
+        use_case.delete(location_id)
+    except Exception as e:
+        raise handle_domain_exception(e)

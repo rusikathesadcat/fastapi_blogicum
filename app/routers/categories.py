@@ -1,79 +1,53 @@
-"""CRUD endpoints for Category."""
-
 from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-
-from app import models, schemas
 from app.database import get_db
+from app.schemas import CategoryCreate, CategoryUpdate, CategoryOut
+from app.domain.use_cases.category_use_case import CategoryUseCase
+from app.api.error_handler import handle_domain_exception
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 
-@router.get("/", response_model=List[schemas.CategoryOut],
-            summary="Список категорий")
-def list_categories(skip: int = 0, limit: int = 20,
-                    db: Session = Depends(get_db)):
-    """Вернуть список всех категорий."""
-    return db.query(models.Category).offset(skip).limit(limit).all()
+def get_category_use_case(db: Session = Depends(get_db)) -> CategoryUseCase:
+    return CategoryUseCase(db)
 
 
-@router.get("/{category_id}", response_model=schemas.CategoryOut,
-            summary="Получить категорию")
-def get_category(category_id: int, db: Session = Depends(get_db)):
-    """Вернуть категорию по id."""
-    category = db.query(models.Category).filter(
-        models.Category.id == category_id
-    ).first()
-    if not category:
-        raise HTTPException(status_code=404, detail="Категория не найдена")
-    return category
+@router.get("/", response_model=List[CategoryOut], summary="Список категорий")
+def list_categories(skip: int = 0, limit: int = 20, use_case: CategoryUseCase = Depends(get_category_use_case)):
+    try:
+        return use_case.get_all(skip=skip, limit=limit)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.post("/", response_model=schemas.CategoryOut,
-             status_code=status.HTTP_201_CREATED,
-             summary="Создать категорию")
-def create_category(payload: schemas.CategoryCreate,
-                    db: Session = Depends(get_db)):
-    """Создать новую категорию."""
-    if db.query(models.Category).filter(
-        models.Category.slug == payload.slug
-    ).first():
-        raise HTTPException(status_code=400,
-                            detail="Категория с таким slug уже существует")
-    category = models.Category(**payload.model_dump())
-    db.add(category)
-    db.commit()
-    db.refresh(category)
-    return category
+@router.get("/{category_id}", response_model=CategoryOut, summary="Получить категорию")
+def get_category(category_id: int, use_case: CategoryUseCase = Depends(get_category_use_case)):
+    try:
+        return use_case.get_by_id(category_id)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.put("/{category_id}", response_model=schemas.CategoryOut,
-            summary="Обновить категорию")
-def update_category(category_id: int, payload: schemas.CategoryUpdate,
-                    db: Session = Depends(get_db)):
-    """Частично обновить категорию."""
-    category = db.query(models.Category).filter(
-        models.Category.id == category_id
-    ).first()
-    if not category:
-        raise HTTPException(status_code=404, detail="Категория не найдена")
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(category, field, value)
-    db.commit()
-    db.refresh(category)
-    return category
+@router.post("/", response_model=CategoryOut, status_code=status.HTTP_201_CREATED, summary="Создать категорию")
+def create_category(payload: CategoryCreate, use_case: CategoryUseCase = Depends(get_category_use_case)):
+    try:
+        return use_case.create(payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
 
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Удалить категорию")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
-    """Удалить категорию по id."""
-    category = db.query(models.Category).filter(
-        models.Category.id == category_id
-    ).first()
-    if not category:
-        raise HTTPException(status_code=404, detail="Категория не найдена")
-    db.delete(category)
-    db.commit()
+@router.put("/{category_id}", response_model=CategoryOut, summary="Обновить категорию")
+def update_category(category_id: int, payload: CategoryUpdate, use_case: CategoryUseCase = Depends(get_category_use_case)):
+    try:
+        return use_case.update(category_id, payload)
+    except Exception as e:
+        raise handle_domain_exception(e)
+
+
+@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить категорию")
+def delete_category(category_id: int, use_case: CategoryUseCase = Depends(get_category_use_case)):
+    try:
+        use_case.delete(category_id)
+    except Exception as e:
+        raise handle_domain_exception(e)
