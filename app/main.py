@@ -3,9 +3,6 @@ from fastapi import FastAPI
 from app.database import Base, engine
 from app.routers import categories, comments, locations, posts, users
 
-# Создаём таблицы в БД при старте (в production используйте Alembic)
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="FastAPI API",
     description=(
