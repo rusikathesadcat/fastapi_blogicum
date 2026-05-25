@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from app.models import User
 from app.infrastructure.repositories.base import BaseRepository
 
-
 class UserRepository(BaseRepository[User]):
     def __init__(self, db_session: Session):
         super().__init__(User, db_session)
@@ -24,3 +23,12 @@ class UserRepository(BaseRepository[User]):
 
     def email_exists(self, email: str) -> bool:
         return self.exists_by_field("email", email)
+
+    def authenticate_user(self, username: str, password: str) -> User | None:
+        user = self.get_by_username(username)
+        if not user:
+            return None
+        from app.core.security import verify_password
+        if not verify_password(password, user.hashed_password):
+            return None
+        return user

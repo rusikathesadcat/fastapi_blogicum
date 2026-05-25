@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from app.domain.exceptions import UserNotFoundError, UserConflictError
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.schemas import UserCreate, UserUpdate
-
+from app.core.security import get_password_hash
 
 class UserUseCase:
     def __init__(self, db_session: Session):
@@ -31,7 +31,9 @@ class UserUseCase:
                 raise UserConflictError(field="username", value=payload.username)
             if self.repository.email_exists(payload.email):
                 raise UserConflictError(field="email", value=payload.email)
-            return self.repository.create(payload.model_dump())
+            user_data = payload.model_dump()
+            user_data["hashed_password"] = get_password_hash(user_data.pop("password"))
+            return self.repository.create(user_data)
         except UserConflictError:
             raise
         except Exception as e:
@@ -65,3 +67,6 @@ class UserUseCase:
             raise
         except Exception as e:
             raise e
+
+    def authenticate(self, username: str, password: str):
+        return self.repository.authenticate_user(username, password)
