@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-
+RUN pip install python-multipart
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
