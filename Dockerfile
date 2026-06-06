@@ -1,37 +1,24 @@
+FROM python:3.13-alpine
 
-FROM python:3.12-slim
-
-
-LABEL maintainer="Meshastick"
-LABEL description="FastAPI Blogicum deployment"
-
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
-
+ENV PATH="${PATH}:/root/.local/bin"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
+RUN apk add --no-cache libpq-dev gcc musl-dev
 
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install python-multipart
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+COPY alembic ./alembic
+COPY alembic.ini .
+COPY app ./app
+COPY start.sh .
 
-
-COPY . .
-
+RUN chmod +x ./start.sh
 
 EXPOSE 8000
 
-
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["sh", "-c", "./start.sh"]

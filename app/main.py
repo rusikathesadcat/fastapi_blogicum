@@ -1,11 +1,17 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from app.database import Base, engine
-from app.routers import categories, comments, locations, posts, users, auth
-from app.core.exceptions import AppException
-from app.api.error_handler import handle_domain_exception
 
-Base.metadata.create_all(bind=engine)
+from app.api.error_handler import handle_domain_exception
+from app.core.exceptions import AppException
+from app.core.middleware import UserActionLoggingMiddleware
+from app.routers import auth, categories, comments, locations, posts, users
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 app = FastAPI(
     title="FastAPI API",
@@ -16,6 +22,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(UserActionLoggingMiddleware)
+
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(categories.router)
@@ -23,13 +31,15 @@ app.include_router(locations.router)
 app.include_router(posts.router)
 app.include_router(comments.router)
 
+
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     response = handle_domain_exception(exc)
     return JSONResponse(
         status_code=response.status_code,
-        content={"detail": response.detail}
+        content={"detail": response.detail},
     )
+
 
 @app.get("/", tags=["Root"], summary="Корневой эндпоинт")
 def root():
